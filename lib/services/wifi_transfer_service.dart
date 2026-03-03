@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as path;
 import 'package:mdns_dart/mdns_dart.dart';
 import 'package:mdns_responder/mdns_responder.dart';
 import 'package:mime/mime.dart';
@@ -11,12 +11,18 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:path/path.dart' as path;
 import '../models/transfer_item.dart';
+import 'monetization/monetization_service.dart';
 import 'transfer_storage.dart';
 
 /// HTTP server for WiFi transfer: upload/download files between devices on same WiFi.
 class WiFiTransferService extends ChangeNotifier {
+  WiFiTransferService(this._storage, this._monetization);
+
   final TransferStorage _storage;
+  final MonetizationService _monetization;
 
   HttpServer? _server;
   MDNSServer? _mdnsServer;
@@ -28,10 +34,13 @@ class WiFiTransferService extends ChangeNotifier {
   bool _isReceiving = false;
   bool _showUploadComplete = false;
   Timer? _uploadCompleteTimer;
+  String? _webPin;
 
-  static const int _maxUploadBytes = 300 * 1024 * 1024; // 300MB
+  static const int _maxUploadBytesFree = 300 * 1024 * 1024; // 300MB
+  static const int _maxUploadBytesPro = 5 * 1024 * 1024 * 1024; // 5GB
 
-  WiFiTransferService(this._storage);
+  int _getMaxUploadBytes() =>
+      _monetization.isPro ? _maxUploadBytesPro : _maxUploadBytesFree;
 
   bool get isRunning => _isRunning;
   bool get isReceiving => _isReceiving;
@@ -109,22 +118,38 @@ class WiFiTransferService extends ChangeNotifier {
   }
 
   Future<Response> _handleIndex(Request request) async {
-    final html = _buildIndexHtml();
+    final isPro = _monetization.isPro;
+    final pinSet = _webPin != null && _webPin!.isNotEmpty;
+    final html = _buildIndexHtml(isPro: isPro, pinSet: pinSet);
     return _cors(Response.ok(html, headers: {'Content-Type': 'text/html; charset=utf-8'}));
   }
 
-  String _buildIndexHtml() {
+  String _buildIndexHtml({required bool isPro, required bool pinSet}) {
     final items = _storage.items;
     final downloadAllHtml = items.isEmpty
         ? ''
-        : '<p><a href="/download-all" class="btn">Download all as ZIP</a></p>';
+        : '<p><a href="/download-all${pinSet ? '?pin=${_escapeUri(_webPin!)}' : ''}" class="btn">Download all as ZIP</a></p>';
     final rows = items.map((item) {
       final size = _formatBytes(item.sizeBytes);
-      return '<tr><td class="thumb"><span class="thumb-placeholder">&#128196;</span></td><td><a href="/download/${item.id}" download>${_escape(item.displayName)}</a></td><td>$size</td></tr>';
+      final downloadUrl = '/download/${item.id}${pinSet ? '?pin=${_escapeUri(_webPin!)}' : ''}';
+      final deleteBtn = isPro
+          ? '<button type="button" class="btn-delete" data-id="${_escape(item.id)}">Delete</button>'
+          : '';
+      final renameBtn = isPro
+          ? '<button type="button" class="btn-rename" data-id="${_escape(item.id)}" data-name="${_escape(item.displayName)}">Rename</button>'
+          : '';
+      final actionsCell = isPro ? '<td class="actions">$deleteBtn $renameBtn</td>' : '';
+      return '<tr><td class="thumb"><span class="thumb-placeholder">&#128196;</span></td><td><a href="$downloadUrl" download>${_escape(item.displayName)}</a></td><td>$size</td>$actionsCell</tr>';
     }).join();
     final tableHtml = items.isEmpty
         ? '<p>No files yet. Upload from the form above.</p>'
-        : '<table><thead><tr><th></th><th>File</th><th>Size</th></tr></thead><tbody>$rows</tbody></table>';
+        : '<table><thead><tr><th></th><th>File</th><th>Size</th>${isPro ? '<th></th>' : ''}</tr></thead><tbody>$rows</tbody></table>';
+    final upgradeNotice = isPro
+        ? ''
+        : '<p class="upgrade-notice">Upgrade to Pro for delete, rename, PIN protection, and more.</p>';
+    final pinSection = isPro
+        ? '<div class="pin-section"><h2>PIN protection</h2><p>Optional: set a PIN to require for downloads.</p><input type="password" id="pinInput" placeholder="PIN"><button type="button" id="setPinBtn">Set PIN</button><button type="button" id="clearPinBtn">Clear PIN</button></div>'
+        : '';
 
     return '''
 <!DOCTYPE html>
@@ -145,10 +170,16 @@ input[type=file],button{padding:0.5rem 1rem;margin:0.5rem 0;} button{background:
 .progress-fill{height:100%;background:#2ee6a6;transition:width 0.15s ease;}
 .upload-status{font-size:0.9rem;color:#c0c0c0;}
 .upload-done{font-size:0.9rem;color:#2ee6a6;margin:0.5rem 0;}
-.upload-err{font-size:0.9rem;color:#e66;margin:0.5rem 0;}</style></head>
+.upload-err{font-size:0.9rem;color:#e66;margin:0.5rem 0;}
+.btn-delete,.btn-rename{font-size:0.8rem;padding:0.25rem 0.5rem;margin-left:4px;background:#2a2a30;color:#f5f5f7;border:1px solid #444;border-radius:6px;cursor:pointer;}
+.btn-delete:hover,.btn-rename:hover{background:#3a3a40;}
+.upgrade-notice{font-size:0.85rem;color:#888;margin:0.5rem 0;}
+.pin-section{margin:1rem 0;padding:1rem;background:#17171c;border-radius:12px;}
+.actions{white-space:nowrap;}</style></head>
 <body>
 <h1>PocketServer</h1>
 <p>Same WiFi only. Send files to this device or get files from it.</p>
+$pinSection
 
 <div class="upload">
 <h2>Send to device</h2>
@@ -218,11 +249,45 @@ input[type=file],button{padding:0.5rem 1rem;margin:0.5rem 0;} button{background:
 <div class="download">
 <h2>Get from device</h2>
 <p>Click a file to download it, or get everything as a ZIP.</p>
+$upgradeNotice
 $downloadAllHtml
 $tableHtml
 </div>
+<script>
+(function(){
+  var setPinBtn = document.getElementById('setPinBtn');
+  var clearPinBtn = document.getElementById('clearPinBtn');
+  var pinInput = document.getElementById('pinInput');
+  if (setPinBtn && pinInput) {
+    setPinBtn.onclick = function() {
+      var pin = pinInput.value;
+      fetch('/api/set-pin', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'pin=' + encodeURIComponent(pin) }).then(function() { location.reload(); });
+    };
+  }
+  if (clearPinBtn) clearPinBtn.onclick = function() {
+    fetch('/api/set-pin', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'pin=' }).then(function() { location.reload(); });
+  };
+  document.querySelectorAll('.btn-delete').forEach(function(btn) {
+    btn.onclick = function() {
+      if (!confirm('Delete this file?')) return;
+      var id = btn.getAttribute('data-id');
+      fetch('/api/delete', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'id=' + encodeURIComponent(id) }).then(function() { location.reload(); });
+    };
+  });
+  document.querySelectorAll('.btn-rename').forEach(function(btn) {
+    btn.onclick = function() {
+      var name = prompt('New name:', btn.getAttribute('data-name') || '');
+      if (name === null || name.trim() === '') return;
+      var id = btn.getAttribute('data-id');
+      fetch('/api/rename', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(name.trim()) }).then(function() { location.reload(); });
+    };
+  });
+})();
+</script>
 </body></html>''';
   }
+
+  String _escapeUri(String s) => Uri.encodeComponent(s);
 
   String _escape(String s) {
     return s
@@ -272,7 +337,7 @@ $tableHtml
     final transformer = MimeMultipartTransformer(boundary);
     try {
       final bytes = await request.read().expand((x) => x).toList();
-      if (bytes.length > _maxUploadBytes) {
+      if (bytes.length > _getMaxUploadBytes()) {
         return _cors(Response(413, body: 'File too large'));
       }
       int saved = 0;
@@ -316,7 +381,14 @@ $tableHtml
     ));
   }
 
+  bool _checkPin(Request request) {
+    if (_webPin == null || _webPin!.isEmpty) return true;
+    final pin = request.url.queryParameters['pin'];
+    return pin == _webPin;
+  }
+
   Future<Response> _handleDownload(Request request, String itemId) async {
+    if (!_checkPin(request)) return _cors(Response(403, body: 'PIN required'));
     final filePath = _storage.getFilePath(itemId);
     if (filePath == null) return _cors(Response.notFound('Not found'));
     final file = File(filePath);
@@ -337,7 +409,58 @@ $tableHtml
 
   String _escapeHeader(String s) => s.replaceAll('"', '\\"').replaceAll('\r', '').replaceAll('\n', '');
 
+  Future<Response> _handleDelete(Request request) async {
+    if (!_monetization.isPro) return _cors(Response(403, body: 'Pro required'));
+    try {
+      final body = await request.read().transform(utf8.decoder).join();
+      final id = Uri.splitQueryString(body)['id'];
+      if (id == null || id.isEmpty) return _cors(Response.badRequest(body: 'id required'));
+      await _storage.deleteItem(id);
+      return _cors(Response.ok('OK'));
+    } catch (e) {
+      debugPrint('[WiFiTransfer] Delete error: $e');
+      return _cors(Response(500, body: e.toString()));
+    }
+  }
+
+  Future<Response> _handleRename(Request request) async {
+    if (!_monetization.isPro) return _cors(Response(403, body: 'Pro required'));
+    try {
+      final body = await request.read().transform(utf8.decoder).join();
+      final params = Uri.splitQueryString(body);
+      final id = params['id'];
+      final name = params['name'];
+      if (id == null || id.isEmpty || name == null) return _cors(Response.badRequest(body: 'id and name required'));
+      await _storage.renameItem(id, name);
+      return _cors(Response.ok('OK'));
+    } catch (e) {
+      debugPrint('[WiFiTransfer] Rename error: $e');
+      return _cors(Response(500, body: e.toString()));
+    }
+  }
+
+  Future<Response> _handleSetPin(Request request) async {
+    if (!_monetization.isPro) return _cors(Response(403, body: 'Pro required'));
+    try {
+      final body = await request.read().transform(utf8.decoder).join();
+      final pin = Uri.splitQueryString(body)['pin'] ?? '';
+      _webPin = pin.isEmpty ? null : pin;
+      return _cors(Response.ok('OK'));
+    } catch (e) {
+      return _cors(Response(500, body: e.toString()));
+    }
+  }
+
+  Future<Response> _handlePinEnabled(Request request) async {
+    final enabled = _monetization.isPro && _webPin != null && _webPin!.isNotEmpty;
+    return _cors(Response.ok(
+      jsonEncode({'enabled': enabled}),
+      headers: {'Content-Type': 'application/json'},
+    ));
+  }
+
   Future<Response> _handleDownloadAll(Request request) async {
+    if (!_checkPin(request)) return _cors(Response(403, body: 'PIN required'));
     final items = _storage.items;
     if (items.isEmpty) {
       return _cors(Response.ok(
@@ -392,6 +515,11 @@ $tableHtml
     if (_isRunning) return true;
     try {
       await _storage.init();
+      if (_monetization.isPro) {
+        _port = _monetization.preferredPort;
+      } else {
+        _port = MonetizationService.defaultPort;
+      }
       final ip = await _getLocalIP();
       final bindAddress = (ip == 'localhost' || ip == '127.0.0.1')
           ? InternetAddress.anyIPv4
@@ -399,8 +527,12 @@ $tableHtml
       final router = Router();
       router.get('/', _handleIndex);
       router.get('/api/items', _handleList);
+      router.get('/api/pin-enabled', (Request req) => _handlePinEnabled(req));
       router.get('/thumbnail/<itemId>', (Request req, String itemId) => _handleThumbnail(req, itemId));
       router.post('/upload', _handleUpload);
+      router.post('/api/delete', _handleDelete);
+      router.post('/api/rename', _handleRename);
+      router.post('/api/set-pin', _handleSetPin);
       router.get('/download/<itemId>', (Request req, String itemId) => _handleDownload(req, itemId));
       router.get('/download-all', _handleDownloadAll);
 
@@ -455,6 +587,9 @@ $tableHtml
           }
         }
       }
+      if (_monetization.isPro) {
+        await WakelockPlus.enable();
+      }
       debugPrint('[WiFiTransfer] Started $_serverUrl');
       notifyListeners();
       return true;
@@ -481,6 +616,7 @@ $tableHtml
 
   Future<void> stopServer() async {
     if (!_isRunning || _server == null) return;
+    await WakelockPlus.disable();
     if (_usedNativeMdns) {
       try { await MdnsResponder().stopService(); } catch (e) {
         debugPrint('[WiFiTransfer] Native mDNS stop: $e');

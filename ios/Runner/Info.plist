@@ -72,5 +72,8 @@
 	<array>
 		<string>_http._tcp</string>
 	</array>
+	<!-- Replace with your AdMob App ID from https://admob.google.com -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 </dict>
 </plist>

@@ -3,10 +3,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import '../errors/pro_required_exception.dart';
 import '../models/transfer_item.dart';
+import 'monetization/monetization_service.dart';
 
 /// Simple file storage for transferred files. No encryption, no auth.
 class TransferStorage extends ChangeNotifier {
+  TransferStorage(this._monetization);
+
+  final MonetizationService _monetization;
   Directory? _root;
   final List<TransferItem> _items = [];
   File? _indexFile;
@@ -109,5 +114,52 @@ class TransferStorage extends ChangeNotifier {
   String? getThumbnailPath(String itemId) {
     // No thumbnails in this minimal app; could add later.
     return null;
+  }
+
+  /// Pro only. Deletes one file and removes from index.
+  Future<void> deleteItem(String id) async {
+    if (!_monetization.isPro) throw ProRequiredException();
+    await init();
+    final index = _items.indexWhere((i) => i.id == id);
+    if (index < 0) return;
+    final item = _items.removeAt(index);
+    final filePath = path.join(_root!.path, item.relativePath);
+    final f = File(filePath);
+    if (await f.exists()) await f.delete();
+    await _saveIndex();
+    notifyListeners();
+  }
+
+  /// Pro only. Deletes all stored files and clears index.
+  Future<void> clearAll() async {
+    if (!_monetization.isPro) throw ProRequiredException();
+    await init();
+    for (final item in List<TransferItem>.from(_items)) {
+      final filePath = path.join(_root!.path, item.relativePath);
+      final f = File(filePath);
+      if (await f.exists()) await f.delete();
+    }
+    _items.clear();
+    await _saveIndex();
+    notifyListeners();
+  }
+
+  /// Pro only. Renames display name in index; file on disk unchanged.
+  Future<void> renameItem(String id, String newName) async {
+    if (!_monetization.isPro) throw ProRequiredException();
+    if (newName.trim().isEmpty) return;
+    await init();
+    final index = _items.indexWhere((i) => i.id == id);
+    if (index < 0) return;
+    final old = _items[index];
+    _items[index] = TransferItem(
+      id: old.id,
+      name: newName.trim(),
+      sizeBytes: old.sizeBytes,
+      type: old.type,
+      relativePath: old.relativePath,
+    );
+    await _saveIndex();
+    notifyListeners();
   }
 }

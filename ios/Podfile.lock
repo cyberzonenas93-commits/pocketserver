@@ -1,0 +1,85 @@
+PODS:
+  - device_info_plus (0.0.1):
+    - Flutter
+  - Flutter (1.0.0)
+  - Google-Mobile-Ads-SDK (11.13.0):
+    - GoogleUserMessagingPlatform (>= 1.1)
+  - google_mobile_ads (5.3.1):
+    - Flutter
+    - Google-Mobile-Ads-SDK (~> 11.13.0)
+    - webview_flutter_wkwebview
+  - GoogleUserMessagingPlatform (3.1.0)
+  - in_app_purchase_storekit (0.0.1):
+    - Flutter
+    - FlutterMacOS
+  - mdns_responder (0.0.1):
+    - Flutter
+  - network_info_plus (0.0.1):
+    - Flutter
+  - package_info_plus (0.4.5):
+    - Flutter
+  - shared_preferences_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
+  - wakelock_plus (0.0.1):
+    - Flutter
+  - webview_flutter_wkwebview (0.0.1):
+    - Flutter
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
+  - Flutter (from `Flutter`)
+  - google_mobile_ads (from `.symlinks/plugins/google_mobile_ads/ios`)
+  - in_app_purchase_storekit (from `.symlinks/plugins/in_app_purchase_storekit/darwin`)
+  - mdns_responder (from `.symlinks/plugins/mdns_responder/ios`)
+  - network_info_plus (from `.symlinks/plugins/network_info_plus/ios`)
+  - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
+  - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
+  - wakelock_plus (from `.symlinks/plugins/wakelock_plus/ios`)
+  - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
+
+SPEC REPOS:
+  trunk:
+    - Google-Mobile-Ads-SDK
+    - GoogleUserMessagingPlatform
+
+EXTERNAL SOURCES:
+  device_info_plus:
+    :path: ".symlinks/plugins/device_info_plus/ios"
+  Flutter:
+    :path: Flutter
+  google_mobile_ads:
+    :path: ".symlinks/plugins/google_mobile_ads/ios"
+  in_app_purchase_storekit:
+    :path: ".symlinks/plugins/in_app_purchase_storekit/darwin"
+  mdns_responder:
+    :path: ".symlinks/plugins/mdns_responder/ios"
+  network_info_plus:
+    :path: ".symlinks/plugins/network_info_plus/ios"
+  package_info_plus:
+    :path: ".symlinks/plugins/package_info_plus/ios"
+  shared_preferences_foundation:
+    :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
+  wakelock_plus:
+    :path: ".symlinks/plugins/wakelock_plus/ios"
+  webview_flutter_wkwebview:
+    :path: ".symlinks/plugins/webview_flutter_wkwebview/darwin"
+
+SPEC CHECKSUMS:
+  device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  Google-Mobile-Ads-SDK: 14f57f2dc33532a24db288897e26494640810407
+  google_mobile_ads: 16ad301354fa6a7ea55770c6254bd4339bf8558b
+  GoogleUserMessagingPlatform: befe603da6501006420c206222acd449bba45a9c
+  in_app_purchase_storekit: 22cca7d08eebca9babdf4d07d0baccb73325d3c8
+  mdns_responder: b62b0b444b8878bc929775bceeedd92855aee88e
+  network_info_plus: cf61925ab5205dce05a4f0895989afdb6aade5fc
+  package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
+  shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
+  wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
+  webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
+
+PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
+
+COCOAPODS: 1.16.2
