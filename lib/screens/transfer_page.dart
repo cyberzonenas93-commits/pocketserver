@@ -6,8 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+// //// AdMob Integration
 import '../app/theme.dart';
-import '../services/monetization/ad_service.dart';
+import '../services/ad_service.dart';
 import '../services/monetization/monetization_service.dart';
 import '../services/wifi_transfer_service.dart';
 import 'pro_screen.dart';
@@ -76,7 +77,6 @@ class _TransferPageState extends State<TransferPage> {
 
   @override
   Widget build(BuildContext context) {
-    final adService = context.read<AdService>();
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
@@ -158,12 +158,15 @@ class _TransferPageState extends State<TransferPage> {
                   },
                 ),
               ),
-              Consumer2<MonetizationService, WiFiTransferService>(
-                builder: (_, monetization, wifi, __) {
-                  if (monetization.isPro) return const SizedBox.shrink();
-                  if (wifi.isReceiving || wifi.showUploadComplete) return const SizedBox.shrink();
+              // //// AdMob Integration
+              Consumer2<AdService, WiFiTransferService>(
+                builder: (_, ads, wifi, __) {
+                  if (wifi.isReceiving) return const SizedBox.shrink();
+                  if (wifi.showUploadComplete) return const SizedBox.shrink();
                   if (!_bannerAllowed) return const SizedBox.shrink();
-                  return adService.getBanner();
+                  final monetization = context.read<MonetizationService>();
+                  if (monetization.isPro) return const SizedBox.shrink();
+                  return ads.buildBanner();
                 },
               ),
             ],

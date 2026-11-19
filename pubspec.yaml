@@ -45,7 +45,8 @@ dependencies:
   mdns_responder:
     git:
       url: https://github.com/eelco2k/mdns_responder.git
-  google_mobile_ads: ^5.2.0
+  # //// AdMob Integration
+  google_mobile_ads: ^5.0.0
   in_app_purchase: ^3.2.0
   shared_preferences: ^2.3.3
   wakelock_plus: ^1.2.8
